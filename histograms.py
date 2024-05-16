@@ -6,24 +6,19 @@ import time
 import os
 from tensorflow.keras.optimizers import Adam
 
-#Take image and convert to 1d np array
 def load_and_preprocess(path):
-    # Load TIFF image
     image = Image.open('image.tif')
     print(image.mode)
-    # Convert to NumPy array
     image_np = np.array(image)
 
     flat = image_np.flatten()
 
     return flat  
-    # # Convert to TensorFlow tensor
     # image_tensor = tf.convert_to_tensor(image_np, dtype=tf.float32)
 
     # tf.reshape(image_tensor, [-1, 1])
 
     # return image_tensor
-    # Now you can use image_tensor with TensorFlow
 
 
 def normalize_and_histogram(pixel_values):
@@ -37,21 +32,17 @@ def normalize_and_histogram(pixel_values):
     Returns:
     np.array: A 1D array of length 10 containing the histogram proportions.
     """
-    # Min-Max Normalization
     min_val = np.min(pixel_values)
     max_val = np.max(pixel_values)
     
-    # Handle case where all pixel values are the same
     if max_val == min_val:
-        return np.zeros(10)  # Return an array of zeros as histogram
+        return np.zeros(10)  
 
     normalized = (pixel_values - min_val) / (max_val - min_val)
 
-    # Compute the histogram
     # np.histogram returns two arrays: the counts and the bin edges
     histogram, _ = np.histogram(normalized, bins=10, range=(0, 1))
 
-    # Normalize histogram to show proportions
     total_values = len(pixel_values)
     histogram_proportions = histogram / total_values
 
@@ -78,15 +69,12 @@ def min_max_normalize(tensor):
     Returns:
         tf.Tensor: The normalized tensor with values scaled between 0 and 1.
     """
-    # Calculate the minimum and maximum of the tensor
     min_val = tf.reduce_min(tensor)
     max_val = tf.reduce_max(tensor)
     
-    # Avoid division by zero in case all elements are the same
     if min_val == max_val:
         return tf.zeros_like(tensor)
 
-    # Normalize the tensor
     normalized_tensor = (tensor - min_val) / (max_val - min_val)
     return normalized_tensor
 
@@ -101,30 +89,24 @@ def specialized_histogram(image, bins=10):
     Returns:
         tf.Tensor: The normalized histogram as a probability distribution.
     """
-    # Calculate the minimum and maximum of the tensor
     min_val = tf.reduce_min(image)
     max_val = tf.reduce_max(image)
 
-    # Calculate the thresholds for 10% and 90% of the range
     lower_10_percent = min_val + 0.1 * (max_val - min_val)
     upper_10_percent = min_val + 0.9 * (max_val - min_val)
 
-    # Set the range for the bins
     first_bins_range = tf.linspace(min_val, lower_10_percent, num=6)
     last_bins_range = tf.linspace(upper_10_percent, max_val, num=6)
 
-    # Concatenate the bin ranges, removing the duplicate middle value
     full_bins_range = tf.concat([first_bins_range[:-1], last_bins_range], axis=0)
 
-    # Calculate histogram using the custom bin edges
     histogram_values = tf.histogram_fixed_width(image, [min_val, max_val], nbins=bins, value_range=[full_bins_range[0], full_bins_range[-1]])
 
-    # Normalize the histogram to sum to 1 (probability distribution)
     normalized_histogram = histogram_values / tf.reduce_sum(histogram_values)
 
     return normalized_histogram
 
-def compile_LSTM():
+def compile_LSTM(lr):
     model = tf.keras.Sequential([
     tf.keras.layers.LSTM(50, input_shape=(45, 20), return_sequences=True),
     tf.keras.layers.Dropout(0.2),
@@ -132,7 +114,7 @@ def compile_LSTM():
     tf.keras.layers.Dropout(0.2),
     tf.keras.layers.Dense(1)
 ])
-    optimizer = Adam(learning_rate=0.2)  # You might increase it to 0.01 or more, or use a learning rate scheduler
+    optimizer = Adam(learning_rate=lr)  
     model.compile(optimizer=optimizer, loss='mse', metrics=['mae'])
     model.summary()
     return model
@@ -155,7 +137,6 @@ def get_counts():
         if year in year_counts:
             year_counts[year] += 1
         else:
-        # Otherwise, add the year to the dictionary with a count of 1
             year_counts[year] = 1
         if band in band_counts:
             band_counts[band] += 1
@@ -176,14 +157,12 @@ def full_bands():
             if year in year_counts1:
                 year_counts1[year] += 1
             else:
-                # Otherwise, add the year to the dictionary with a count of 1
                 year_counts1[year] = 1
 
         if band == "b02":
             if year in year_counts2:
                 year_counts2[year] += 1
             else:
-                # Otherwise, add the year to the dictionary with a count of 1
                 year_counts2[year] = 1
     return year_counts1, year_counts2
 
@@ -210,7 +189,6 @@ def organize_files(directory, bands=['b01', 'b02'], files_per_band=45, exclude_y
             year = date[:4]
             band = parts[3]
             
-            # Skip excluded years
             if year in exclude_years:
                 continue
             
@@ -227,10 +205,8 @@ def process_year_data(year_data):
     """
     histograms = []
     for b01_path, b02_path in zip(year_data['b01'], year_data['b02']):
-        # Load and process b01 and b02 images, compute histograms
         hist_b01 = normalize_and_histogram(load_and_preprocess(b01_path))
         hist_b02 = normalize_and_histogram(load_and_preprocess(b02_path))
-        # Concatenate histograms into a single array
         combined_histogram = np.concatenate([hist_b01, hist_b02])
         histograms.append(combined_histogram)
     return np.array(histograms)
@@ -239,14 +215,12 @@ def create_dataset(directory):
     """
     Create the dataset from the files in the given directory.
     """
-    # Organize files by year and band
     file_map = organize_files(directory)
     years_sorted = sorted(file_map['b01'].keys())
     dataset = []
 
     for year in years_sorted:
         if year in file_map['b01'] and year in file_map['b02']:
-            # Ensure both bands have sufficient data
             if len(file_map['b01'][year]) == 45 and len(file_map['b02'][year]) == 45:
                 year_data = {'b01': file_map['b01'][year], 'b02': file_map['b02'][year]}
                 year_histograms = process_year_data(year_data)
@@ -263,7 +237,7 @@ def MAE(network, testing_X, testing_y):
     mae = tf.reduce_mean(errors)
     return mae.numpy()
 
-def main():
+def main(epochsn, lr):
     # start = time.time()
     # img = load_and_preprocess('image.tif')
     # histogram = normalize_and_histogram(img)
@@ -317,23 +291,15 @@ def main():
     tLabels = npLabels[-3:]
     labels = npLabels[:-3]
     labels_tensor = tf.convert_to_tensor(labels)
-    model = compile_LSTM()
-    history = model.fit(training_X, labels_tensor, epochs=1200, validation_split=0.20, batch_size=64)
-    model.save('model950epochs.h5')
+    model = compile_LSTM(lr)
+    history = model.fit(training_X, labels_tensor, epochs=epochsn, validation_split=0.20, batch_size=64)
+    model.save(str(epochsn) + str(lr))
     print(MAE(model, tdata_tensor, tLabels))
     
 
 
 
 
-
-
-
-
-
-
-
-
-
-if __name__ == "__main__":
-    main()
+for epochs in [25, 50, 100, 200, 400, 800]:
+    for lr in [0.00001, 0.0001, 0.001, 0.01, 0.1]:
+        main(epochs, lr)
